@@ -1,0 +1,25 @@
+name: Generate 3D assets
+on:
+  push:
+    paths:
+      - '.github/workflows/build-3d-assets.yml'
+      - 'tools/build_3d_assets.py'
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  generate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: pip install numpy pillow trimesh
+      - run: python tools/build_3d_assets.py
+      - name: Commit GLB files
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add assets/models/snake_uv_pbr.glb assets/models/frog_detailed.glb assets/models/snake_*.png
+          git diff --cached --quiet || (git commit -m "Generate UV-mapped 3D snake and frog assets" && git push)
