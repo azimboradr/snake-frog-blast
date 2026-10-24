@@ -256,8 +256,8 @@ async function integrateAuthoredGLB(){
    assetCache.frog=frogAsset;
    // Replace only artwork. Keep each existing frog's position, collision and behavior.
    for(const f of frogs){
-    const root=f.mesh||f.group||f.obj||f.g;
-    if(root&&root.isGroup){root.clear();const visual=frogAsset.clone(true);root.add(visual)}
+    const root=f.obj;
+    if(root&&root.isGroup){root.clear();const visual=frogAsset.clone(true);visual.scale.setScalar(.78);root.add(visual)}
    }
    glbStatus.frog=true;
   }else console.warn('Frog GLB not found; original visuals retained',frogResult.reason);
