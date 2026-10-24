@@ -324,7 +324,6 @@ for(const s of spiders){s.t+=dt;s.obj.position.set(s.x+Math.sin(s.t)*.18,0,s.z+M
 requestAnimationFrame(frame);const playButton=document.getElementById('play');playButton.disabled=true;playButton.textContent='3D MODELLER YÜKLENİYOR';
 modelReady.then(()=>{const missing=['tree','frog','spider','rock','log'].filter(k=>!assetCache[k]);playButton.disabled=false;playButton.textContent=missing.length?'EKSİK MODEL · OYNA':'GLB INTEGRATION · OYNA';playButton.onclick=()=>reset(false);if(missing.length){const error=document.getElementById('error');error.style.display='block';error.textContent='Bazı modeller yüklenemedi: '+missing.join(', ')}});
 addEventListener('error',e=>{const el=document.getElementById('error');el.style.display='block';el.textContent='Forest Rebuild grafik hatası: '+(e.message||'Bilinmeyen hata')});
+  setTimeout(()=>integrateAuthoredGLB(),100);
 }
-
-setTimeout(()=>integrateAuthoredGLB(),100);
 </script></body></html>
