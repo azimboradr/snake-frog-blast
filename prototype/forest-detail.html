@@ -1,0 +1,396 @@
+<!doctype html><html lang="tr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no"><title>Snake Frog Rush · Forest Rebuild</title><style>*{box-sizing:border-box}html,body{margin:0;width:100%;height:100%;overflow:hidden;background:#193d31;font-family:system-ui,sans-serif;color:#fff;touch-action:none}canvas{display:block;touch-action:none}#hud{position:fixed;top:calc(env(safe-area-inset-top) + 8px);left:3%;width:94%;display:flex;justify-content:space-around;background:#163b2edc;border:1px solid #ffffff30;border-radius:16px;padding:10px 4px;pointer-events:none;font-weight:800;text-align:center;font-size:16px}#hud small{display:block;font-size:10px;opacity:.8;letter-spacing:.05em}#foot{position:fixed;bottom:calc(env(safe-area-inset-bottom) + 10px);width:100%;text-align:center;text-shadow:0 2px 6px #102d25;font-weight:700;font-size:12px;pointer-events:none}#overlay{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;background:#0d241cb8}#panel{background:#183e31f5;border:1px solid #b1d997a0;border-radius:24px;padding:24px 22px;width:86%;max-width:380px;text-align:center;box-shadow:0 15px 50px #0008}h1{font-size:24px;margin:0 0 10px}p{font-size:14px;line-height:1.7}button{border:2px solid #c2e88e;background:#65ac3f;color:white;border-radius:13px;padding:14px 25px;font-weight:900;font-size:18px}#error{display:none;position:fixed;inset:30% 7% auto;background:#6e352e;padding:20px;border-radius:12px}</style></head><body><div id="hud"><div><small>🐸 KURBAĞA</small><span id="count">0 / 8</span></div><div><small>⏱ SÜRE</small><span id="time">77</span></div><div><small>♥ CAN</small><span id="life">♥♥♥</span></div></div><div id="foot">GLB INTEGRATION · BÖLÜM <span id="lvl">1</span> · PUAN <span id="score">0</span></div><div id="overlay"><div id="panel"><h1>SNAKE FROG RUSH</h1><p>Parmağını sürükleyerek yılanı yönet. Parmağını kaldırınca yön korunur. Kurbağaları yakala, engellerden ve kendi gövdenden kaç!</p><button id="play">FOREST DETAIL · OYNA</button></div></div><div id="error"></div><script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/0.160.0/three.min.js"></script><script src="../assets/textures/pbr-pack.js"></script><script>
+'use strict';
+if(!window.THREE){let el=document.getElementById('error');el.style.display='block';el.textContent='3D motor yüklenemedi. İnternet bağlantısını kontrol edip yeniden dene.'}
+else{
+const T=THREE,scene=new T.Scene();
+// glTF 2.0 importer for our authored embedded-buffer static PBR meshes.
+const assetCache={};
+async function loadAsset(kind){
+ const url='../assets/models/'+kind+'.gltf';
+ const res=await fetch(url);if(!res.ok)throw new Error('3D model '+kind+': '+res.status);
+ const gltf=await res.json(),uri=gltf.buffers[0].uri;
+ if(!uri.startsWith('data:application/octet-stream;base64,'))throw new Error('Unexpected glTF buffer');
+ const raw=atob(uri.split(',')[1]),data=new Uint8Array(raw.length);
+ for(let i=0;i<raw.length;i++)data[i]=raw.charCodeAt(i);
+ const buffer=data.buffer;
+ function read(i){const a=gltf.accessors[i],v=gltf.bufferViews[a.bufferView],off=(v.byteOffset||0)+(a.byteOffset||0);
+ const count=a.count*(a.type==='VEC3'?3:1);
+ return a.componentType===5126?new Float32Array(buffer,off,count):new Uint16Array(buffer,off,count)}
+ const root=new T.Group();
+ for(const primitive of gltf.meshes[0].primitives){
+ const geo=new T.BufferGeometry();const position=read(primitive.attributes.POSITION);
+ geo.setAttribute('position',new T.BufferAttribute(position,3));geo.setIndex(new T.BufferAttribute(read(primitive.indices),1));
+ geo.computeVertexNormals();
+ const material=gltf.materials[primitive.material].pbrMetallicRoughness;
+ const m=new T.MeshStandardMaterial({color:new T.Color(...material.baseColorFactor.slice(0,3)),roughness:material.roughnessFactor,metalness:0,side:T.DoubleSide});
+ const mesh=new T.Mesh(geo,m);mesh.castShadow=true;mesh.receiveShadow=true;root.add(mesh)}
+ return root
+}
+const modelReady=Promise.resolve();
+scene.background=new T.Color(0x9abfa4);scene.fog=new T.FogExp2(0x9abfa4,.013);
+const renderer=new T.WebGLRenderer({antialias:true,powerPreference:'high-performance'});renderer.setPixelRatio(Math.min(devicePixelRatio||1,1.5));renderer.shadowMap.enabled=true;renderer.shadowMap.type=T.PCFSoftShadowMap;renderer.outputColorSpace=T.SRGBColorSpace;renderer.toneMapping=T.ACESFilmicToneMapping;renderer.toneMappingExposure=1.3;document.body.prepend(renderer.domElement);
+const camera=new T.OrthographicCamera(-10,10,18,-18,.1,110);camera.position.set(0,42,7);camera.lookAt(0,0,0);
+scene.add(new T.HemisphereLight(0xeaffdf,0x496b56,2.1));const sun=new T.DirectionalLight(0xffe9b8,2.4);sun.position.set(-10,20,9);sun.castShadow=true;sun.shadow.mapSize.set(768,768);sun.shadow.camera.left=-18;sun.shadow.camera.right=18;sun.shadow.camera.top=23;sun.shadow.camera.bottom=-23;sun.shadow.bias=-.0003;scene.add(sun);
+const mat=(c,r=.85)=>new T.MeshStandardMaterial({color:c,roughness:r}),grass=mat(0x6a9a61),leaf=[mat(0x2e7143),mat(0x4e9652),mat(0x6ca65e)],stone=mat(0x84928a),wood=mat(0x78563b),water=new T.MeshStandardMaterial({color:0x4a9fa8,roughness:.27,metalness:.08}),frogGreen=mat(0x5ec044,.47),frogGold=mat(0xf1c449,.4),belly=mat(0xc4d99a,.65),eyeWhite=mat(0xf9f9e9,.35),pupil=mat(0x142d1c,.23),dark=mat(0x244b2b),pink=mat(0xb87979);
+const ball=new T.SphereGeometry(1,20,16),smallBall=new T.SphereGeometry(1,12,10);
+function paintedTexture(type){const c=document.createElement('canvas');c.width=c.height=256;const g=c.getContext('2d');let s=type==='grass'?741:type==='bark'?512:type==='stone'?833:239;const random=()=>{s=(Math.imul(s,1664525)+1013904223)>>>0;return s/4294967296};
+const colors=type==='grass'?['#729f64','#80ac6e','#628c59','#a0bb7c']:type==='bark'?['#755238','#563b2c','#956b47','#3f3528']:type==='stone'?['#929d90','#788c80','#a7ada0','#647c70']:['#62a94d','#397d3a','#83c36a','#245c32'];g.fillStyle=colors[0];g.fillRect(0,0,256,256);
+for(let i=0;i<(type==='grass'?11000:4200);i++){let x=random()*256,y=random()*256,w=type==='bark'?1+random()*3:1+random()*6,len=type==='bark'?10+random()*48:1+random()*9;g.globalAlpha=.12+random()*.43;g.fillStyle=colors[Math.floor(random()*colors.length)];g.fillRect(x,y,w,len)}
+if(type==='grass'){for(let i=0;i<330;i++){let x=random()*256,y=random()*256;g.globalAlpha=.35;g.fillStyle=random()>.5?'#e7d98b':'#f3f1dc';g.beginPath();g.arc(x,y,.4+random()*.7,0,7);g.fill()}}
+if(type==='stone'){for(let i=0;i<90;i++){g.globalAlpha=.1+random()*.14;g.strokeStyle='#304f3c';g.beginPath();let x=random()*256,y=random()*256;g.moveTo(x,y);g.lineTo(x+random()*22,y+random()*14);g.stroke()}}
+g.globalAlpha=1;let t=new T.CanvasTexture(c);t.colorSpace=T.SRGBColorSpace;t.wrapS=t.wrapT=T.RepeatWrapping;t.anisotropy=Math.min(8,renderer.capabilities.getMaxAnisotropy());return t}
+const pbr=window.SnakeFrogPBR.build(T,renderer);
+const grassPBR=pbr.get('grass'),woodPBR=pbr.get('forest'),rockPBR=pbr.get('rock'),snakePBR=pbr.get('snake');
+const grassTex=grassPBR.map,barkTex=woodPBR.map,stoneTex=rockPBR.map;
+function pbrApply(material,pack,normalScale=.24){material.map=pack.map;material.normalMap=pack.normalMap;material.normalScale.set(normalScale,normalScale);material.roughnessMap=pack.roughnessMap;material.needsUpdate=true}
+pbrApply(grass,grassPBR,.16);pbrApply(wood,woodPBR,.32);pbrApply(stone,rockPBR,.28);
+function surfaceMaps(kind){
+ const c=document.createElement('canvas');c.width=c.height=512;const g=c.getContext('2d');
+ let seed=kind==='scales'?17421:kind==='soil'?8531:9482;
+ const rand=()=>{seed=(Math.imul(seed,1664525)+1013904223)>>>0;return seed/4294967296};
+ if(kind==='scales'){
+ g.fillStyle='#87938a';g.fillRect(0,0,512,512);
+ for(let row=0;row<35;row++)for(let j=0;j<31;j++){
+ const x=j*17+(row%2)*8.5,y=row*15;
+ g.fillStyle=rand()>.55?'#aab6a9':'#677d70';
+ g.beginPath();g.ellipse(x,y,8,9,0,Math.PI,Math.PI*2);g.fill();
+ g.strokeStyle='#d4dccc';g.lineWidth=1.6;g.beginPath();g.ellipse(x,y,7,8,0,0,Math.PI);g.stroke()
+ }
+ }else{
+ g.fillStyle=kind==='soil'?'#82734f':'#777c68';g.fillRect(0,0,512,512);
+ for(let i=0;i<18000;i++){let x=rand()*512,y=rand()*512;g.globalAlpha=.08+rand()*.35;g.fillStyle=rand()>.5?'#d5cc9b':'#253b25';g.fillRect(x,y,1+rand()*4,1+rand()*5)}
+ g.globalAlpha=1;
+ }
+ const t=new T.CanvasTexture(c);t.wrapS=t.wrapT=T.RepeatWrapping;t.anisotropy=Math.min(8,renderer.capabilities.getMaxAnisotropy());return t;
+}
+const scaleBump=surfaceMaps('scales');scaleBump.repeat.set(1,2);
+const soilTex=surfaceMaps('soil');soilTex.colorSpace=T.SRGBColorSpace;soilTex.repeat.set(7,14);grassTex.repeat.set(5,10);barkTex.repeat.set(2,3);stoneTex.repeat.set(2,2);
+grass.map=grassTex;grass.needsUpdate=true;wood.map=barkTex;wood.needsUpdate=true;stone.map=stoneTex;stone.needsUpdate=true;
+const flowerPetal=mat(0xf3e7b2),flowerPink=mat(0xe7b0a6),flowerCenter=mat(0xe5b74a),moss=mat(0x477f45),frogLight=mat(0x9cda78,.55),frogSpot=mat(0x3c893c,.7),frogMouth=mat(0x2e633b),spiderBrown=mat(0x3c302b,.78),spiderEyes=mat(0xe5bc7e,.25);
+
+function mesh(geo,m,x=0,y=0,z=0,parent=scene){const o=new T.Mesh(geo,m);o.position.set(x,y,z);o.castShadow=true;o.receiveShadow=true;parent.add(o);return o}
+let seed=18271;function rnd(){seed=(Math.imul(seed,1664525)+1013904223)>>>0;return seed/4294967296}
+
+/* VISUAL ART OVERHAUL: textured floor, authored scene props, coherent forest palette */
+scene.background.set(0x263c30);scene.fog.color.set(0x263c30);scene.fog.density=.018;
+renderer.toneMappingExposure=1.08;
+sun.color.set(0xffd8a1);sun.intensity=2.8;sun.position.set(-12,23,-7);
+grass.color.set(0x9da991);water.color.set(0x326f72);water.roughness=.16;
+function artTexture(seed,size=512){
+ const c=document.createElement('canvas');c.width=c.height=size;const ctx=c.getContext('2d');
+ let state=seed;const random=()=>{state=(Math.imul(state,1664525)+1013904223)>>>0;return state/4294967296};
+ const image=ctx.createImageData(size,size);
+ for(let y=0;y<size;y++)for(let x=0;x<size;x++){
+ const i=(y*size+x)*4;
+ const a=Math.sin(x*.018+Math.sin(y*.022)*2)*.5+Math.sin(y*.031+x*.011)*.32;
+ const b=(random()-.5)*33;
+ image.data[i]=Math.max(0,57+a*18+b);
+ image.data[i+1]=Math.max(0,76+a*24+b);
+ image.data[i+2]=Math.max(0,43+a*11+b*.68);
+ image.data[i+3]=255;
+ }
+ ctx.putImageData(image,0,0);
+ for(let i=0;i<7200;i++){
+ const x=random()*size,y=random()*size;
+ ctx.fillStyle=['#344b2d','#6c7742','#8a8054','#3c4932','#aaa16a'][Math.floor(random()*5)];
+ ctx.globalAlpha=.12+random()*.35;ctx.beginPath();ctx.ellipse(x,y,.7+random()*3,.5+random()*2,random()*6.28,0,6.28);ctx.fill()
+ }
+ ctx.globalAlpha=1;
+ // fallen leaves with veins, twigs, soil stones
+ for(let i=0;i<780;i++){
+ const x=random()*size,y=random()*size,a=random()*6.28,r=2+random()*5;
+ ctx.save();ctx.translate(x,y);ctx.rotate(a);
+ ctx.fillStyle=['#99784c','#c29b57','#566f37','#493f2b','#a57945'][Math.floor(random()*5)];
+ ctx.globalAlpha=.32+random()*.45;
+ ctx.beginPath();ctx.moveTo(0,-r);ctx.quadraticCurveTo(r*.85,0,0,r);ctx.quadraticCurveTo(-r*.85,0,0,-r);ctx.fill();
+ ctx.strokeStyle='#312f21';ctx.lineWidth=.5;ctx.beginPath();ctx.moveTo(0,-r);ctx.lineTo(0,r);ctx.stroke();ctx.restore();
+ }
+ for(let i=0;i<120;i++){
+ ctx.strokeStyle='#4e422e';ctx.lineWidth=.7+random()*1.5;ctx.globalAlpha=.3+random()*.4;
+ const x=random()*size,y=random()*size;ctx.beginPath();ctx.moveTo(x,y);ctx.lineTo(x+random()*18-9,y+random()*18-9);ctx.stroke()
+ }
+ ctx.globalAlpha=1;
+ const tex=new T.CanvasTexture(c);tex.colorSpace=T.SRGBColorSpace;tex.wrapS=tex.wrapT=T.RepeatWrapping;
+ tex.repeat.set(3,6);tex.anisotropy=Math.min(8,renderer.capabilities.getMaxAnisotropy());return tex
+}
+grass.map=artTexture(82623);grass.roughness=1;grass.needsUpdate=true;
+
+/* Forest floor: broad multi-scale painted biomes rather than a repeated green tile */
+function terrainAtlas(){
+ const c=document.createElement('canvas');c.width=1024;c.height=2048;const ctx=c.getContext('2d');
+ let seed=1712026;const rnd=()=>{seed=(Math.imul(seed,1664525)+1013904223)>>>0;return seed/4294967296};
+ ctx.fillStyle='#414f30';ctx.fillRect(0,0,1024,2048);
+ // Large organic soil and moss beds, no square tile boundaries.
+ for(let k=0;k<420;k++){
+  const x=rnd()*1024,y=rnd()*2048,rx=18+rnd()*125,ry=25+rnd()*145;
+  const color=['#34462b','#5a5a34','#6b5c3b','#303f2a','#6b7240','#766a45','#3b4f30'][Math.floor(rnd()*7)];
+  ctx.save();ctx.translate(x,y);ctx.rotate(rnd()*6.28);ctx.globalAlpha=.09+rnd()*.22;
+  const grad=ctx.createRadialGradient(0,0,0,0,0,Math.max(rx,ry));
+  grad.addColorStop(0,color);grad.addColorStop(1,'transparent');ctx.fillStyle=grad;
+  ctx.beginPath();ctx.ellipse(0,0,rx,ry,0,0,Math.PI*2);ctx.fill();ctx.restore()
+ }
+ // Soil grain and short ground-cover strokes at three scales
+ for(let i=0;i<95000;i++){
+  const x=rnd()*1024,y=rnd()*2048,a=rnd(),size=.4+rnd()*2.2;
+  ctx.fillStyle=a<.26?'#94845a':a<.52?'#293c25':a<.76?'#75844d':'#4b4b32';
+  ctx.globalAlpha=.12+rnd()*.35;ctx.fillRect(x,y,size,size*(.5+rnd()))
+ }
+ for(let i=0;i<7500;i++){
+  const x=rnd()*1024,y=rnd()*2048,angle=rnd()*6.28;
+  ctx.strokeStyle=rnd()<.6?'#627849':'#9d8652';ctx.globalAlpha=.16+rnd()*.35;
+  ctx.lineWidth=.5+rnd()*1.4;ctx.beginPath();ctx.moveTo(x,y);ctx.lineTo(x+Math.cos(angle)*(2+rnd()*8),y+Math.sin(angle)*(2+rnd()*8));ctx.stroke()
+ }
+ // Small leaf litter: crisp identifiable leaves with central veins
+ for(let i=0;i<2300;i++){
+  const x=rnd()*1024,y=rnd()*2048,r=2+rnd()*6,a=rnd()*6.28;
+  ctx.save();ctx.translate(x,y);ctx.rotate(a);ctx.globalAlpha=.35+rnd()*.5;
+  ctx.fillStyle=['#ad874b','#8a663e','#d1ac6b','#627b41','#3b542e'][Math.floor(rnd()*5)];
+  ctx.beginPath();ctx.moveTo(0,-r);ctx.quadraticCurveTo(r*.75,-r*.2,0,r);ctx.quadraticCurveTo(-r*.75,-r*.2,0,-r);ctx.fill();
+  ctx.strokeStyle='#59452e';ctx.lineWidth=.55;ctx.beginPath();ctx.moveTo(0,-r);ctx.lineTo(0,r);ctx.stroke();ctx.restore()
+ }
+ ctx.globalAlpha=1;
+ const t=new T.CanvasTexture(c);t.colorSpace=T.SRGBColorSpace;t.wrapS=t.wrapT=T.ClampToEdgeWrapping;t.anisotropy=Math.min(8,renderer.capabilities.getMaxAnisotropy());return t
+}
+grass.map=terrainAtlas();grass.color.set(0xffffff);grass.needsUpdate=true;
+
+const forestBark=new T.MeshStandardMaterial({color:0x5a4430,roughness:1,map:woodPBR.map,normalMap:woodPBR.normalMap,normalScale:new T.Vector2(.3,.3)});
+const forestMoss=new T.MeshStandardMaterial({color:0x416d37,roughness:1});
+const forestFern=[0x2c653c,0x386d3c,0x568047,0x74924d].map(c=>new T.MeshStandardMaterial({color:c,roughness:.94,side:T.DoubleSide}));
+const forestStone=new T.MeshStandardMaterial({color:0x788176,roughness:1,map:rockPBR.map,normalMap:rockPBR.normalMap});
+const forestGold=new T.MeshStandardMaterial({color:0xd1a65d,roughness:.65});
+function detailSphere(parent,material,xyz,scale,seg=12){
+ const m=new T.Mesh(new T.SphereGeometry(1,seg,9),material);m.position.set(...xyz);m.scale.set(...scale);m.castShadow=true;m.receiveShadow=true;parent.add(m);return m
+}
+function limb(parent,a,b,r1,r2,material,segments=7){
+ const v1=new T.Vector3(...a),v2=new T.Vector3(...b),d=new T.Vector3().subVectors(v2,v1);
+ const m=new T.Mesh(new T.CylinderGeometry(r2,r1,d.length(),segments),material);
+ m.position.copy(v1).add(v2).multiplyScalar(.5);m.quaternion.setFromUnitVectors(new T.Vector3(0,1,0),d.normalize());
+ m.castShadow=true;parent.add(m);return m
+}
+function makeTree(){
+ const g=new T.Group();
+ limb(g,[0,0,0],[0,2.6,0],.24,.12,forestBark,9);
+ for(let i=0;i<7;i++){
+ const a=i*2.39996,h=1.25+(i%4)*.33,r=.8+(i%3)*.18;
+ const x=Math.cos(a)*r,z=Math.sin(a)*r;
+ limb(g,[0,h-.36,0],[x,h+.18,z],.085,.022,forestBark,6);
+ // foliage built from layered tapered leaves, not large spheres
+ for(let j=0;j<7;j++){
+ const t=j*2.4,px=x+Math.cos(t)*(.17+(j%3)*.12),pz=z+Math.sin(t)*(.17+(j%2)*.14),py=h+.17+(j%3)*.13;
+ const leaf=new T.Mesh(new T.ConeGeometry(.20+(j%2)*.07,.55+(j%3)*.11,5),forestFern[(i+j)%4]);
+ leaf.position.set(px,py,pz);leaf.rotation.set(Math.sin(t)*.45,t,Math.cos(t)*.45);leaf.castShadow=false;g.add(leaf)
+ }
+ }
+ for(let i=0;i<6;i++){let a=i*1.047;limb(g,[0,.12,0],[Math.cos(a)*.48,.02,Math.sin(a)*.48],.09,.018,forestBark,5)}
+ return g
+}
+function makeFrog(){
+ const g=new T.Group(),skin=new T.MeshStandardMaterial({color:0x479e35,roughness:.44}),shade=new T.MeshStandardMaterial({color:0x26642d,roughness:.67}),pale=new T.MeshStandardMaterial({color:0xb8cb77,roughness:.67}),iris=new T.MeshStandardMaterial({color:0xe2b753,roughness:.23}),black=new T.MeshStandardMaterial({color:0x101e12,roughness:.19});
+ detailSphere(g,skin,[0,.37,.16],[.43,.28,.53],18);detailSphere(g,skin,[0,.4,-.35],[.49,.25,.37],18);
+ detailSphere(g,pale,[0,.23,-.43],[.39,.1,.29],16);
+ for(const s of [-1,1]){
+ detailSphere(g,skin,[s*.33,.61,-.47],[.18,.19,.19]);
+ detailSphere(g,iris,[s*.34,.66,-.60],[.12,.12,.09]);
+ detailSphere(g,black,[s*.34,.67,-.684],[.053,.078,.026]);
+ detailSphere(g,pale,[s*.32,.72,-.706],[.025,.028,.012]);
+ // characteristic bent rear legs, long feet and toes
+ detailSphere(g,skin,[s*.43,.25,.43],[.26,.25,.30],14);
+ limb(g,[s*.44,.26,.43],[s*.65,.12,.67],.13,.085,skin);
+ limb(g,[s*.65,.12,.67],[s*.47,.06,.79],.075,.045,skin);
+ limb(g,[s*.31,.28,-.24],[s*.46,.10,-.47],.09,.055,skin);
+ for(let t=-1;t<=1;t++){
+ limb(g,[s*.47,.065,.78],[s*(.47+t*.095),.045,.96],.036,.017,skin,5);
+ limb(g,[s*.46,.065,-.47],[s*(.46+t*.07),.042,-.61],.027,.012,skin,5)
+ }
+ for(let j=0;j<4;j++){let x=s*(.10+(j%2)*.16),z=.03+j*.15;detailSphere(g,shade,[x,.64-j*.045,z],[.07,.015,.085],9)}
+ }
+ return g
+}
+function makeSpider(){
+ const g=new T.Group(),shell=new T.MeshStandardMaterial({color:0x211b18,roughness:.57}),accent=new T.MeshStandardMaterial({color:0x9d6d46,roughness:.78}),eyes=new T.MeshStandardMaterial({color:0xe9b96e,roughness:.2});
+ detailSphere(g,shell,[0,.35,.23],[.34,.26,.44],16);
+ detailSphere(g,accent,[0,.33,-.31],[.22,.18,.24],14);
+ for(let j=0;j<5;j++)detailSphere(g,accent,[0,.59-j*.055,.04+j*.11],[.18-j*.017,.018,.035],10);
+ for(let j=0;j<7;j++){const a=j*2.4;detailSphere(g,accent,[Math.cos(a)*.19,.53,Math.sin(a)*.22+.2],[.06,.022,.07],10)}
+ for(const s of [-1,1])for(let i=0;i<4;i++){
+ const z=.38-i*.24,spread=(1.5-i)*.16;
+ const knee=[s*(.58+i*.04),.53,z+spread],foot=[s*(.9+i*.065),.04,z+spread*1.9];
+ limb(g,[s*.18,.34,z],knee,.06,.038,shell,7);limb(g,knee,foot,.037,.012,shell,7);
+ detailSphere(g,accent,knee,[.055,.05,.055],8)
+ }
+ for(const s of [-1,1])for(let i=0;i<2;i++)detailSphere(g,eyes,[s*(.075+i*.065),.43,-.51],[.029,.028,.026],8);
+ return g
+}
+function makeRock(){
+ const g=new T.Group();const geo=new T.IcosahedronGeometry(.75,1),pos=geo.attributes.position;
+ for(let i=0;i<pos.count;i++){const x=pos.getX(i),y=pos.getY(i),z=pos.getZ(i);const n=1+.13*Math.sin(x*14+y*7)*Math.cos(z*9);pos.setXYZ(i,x*n,y*n*.67+.36,z*n*.82)}geo.computeVertexNormals();
+ const stone=new T.Mesh(geo,forestStone);stone.castShadow=true;stone.receiveShadow=true;g.add(stone);
+ for(let i=0;i<8;i++){let a=i*2.4;detailSphere(g,forestMoss,[Math.cos(a)*.36,.69,Math.sin(a)*.32],[.16,.035,.13],8)}
+ return g
+}
+function makeLog(){
+ const g=new T.Group();limb(g,[-.9,.3,0],[.9,.3,0],.33,.28,forestBark,14);
+ for(let i=0;i<6;i++){let x=-.72+i*.28;detailSphere(g,forestMoss,[x,.58,.03],[.13,.045,.18],9)}
+ for(let s of [-1,1]){let disk=new T.Mesh(new T.CylinderGeometry(.28,.28,.02,16),forestGold);disk.position.set(s*.91,.3,0);disk.rotation.z=Math.PI/2;g.add(disk)}
+ return g
+}
+assetCache.tree=makeTree();assetCache.frog=makeFrog();assetCache.spider=makeSpider();assetCache.rock=makeRock();assetCache.log=makeLog();
+
+const floor=mesh(new T.PlaneGeometry(19,34),grass,0,-.12,0);floor.rotation.x=-Math.PI/2;floor.castShadow=false;
+const trailMat=new T.MeshStandardMaterial({map:soilTex,color:0xc4b69a,roughness:1,transparent:true,opacity:.26,depthWrite:false});
+
+for(const side of [-1,1]){let river=mesh(new T.PlaneGeometry(1.8,35),water,side*9.9,-.1,0);river.rotation.x=-Math.PI/2;river.castShadow=false}
+
+const treeTrunk=new T.CylinderGeometry(.12,.19,.9,7),treeCrown=new T.IcosahedronGeometry(1,2),grassBlade=new T.ConeGeometry(.065,.22,3),flowerGeo=new T.SphereGeometry(1,7,6);
+modelReady.then(()=>{if(!assetCache.tree)return;for(let i=0;i<72;i++){
+ let x=(rnd()-.5)*21,z=(rnd()-.5)*36;if(Math.abs(x)<7.1&&rnd()<.96)continue;
+ const obj=assetCache.tree.clone(true);obj.position.set(x,-.1,z);obj.scale.setScalar(.74+rnd()*.22);obj.rotation.y=rnd()*6.28;scene.add(obj);
+ }});
+for(let i=0;i<0;i++){let x=(rnd()-.5)*21,z=(rnd()-.5)*36;if(Math.abs(x)<7.6&&rnd()<.95)continue;let height=.85+rnd()*.8;let trunk=mesh(treeTrunk,wood,x,height*.35,z);trunk.scale.y=height;for(let k=0;k<5;k++){let a=k*2.4;let crown=mesh(treeCrown,leaf[(i+k)%3],x+Math.cos(a)*.25,.67+height*.35+(k===0?.31:0),z+Math.sin(a)*.24);crown.scale.set(.39+rnd()*.23,.4+rnd()*.22,.39+rnd()*.21);crown.rotation.y=rnd()*6.28}}
+// GPU instancing keeps foliage draw calls nearly constant on mobile.
+const bladeMat=forestFern[1],bladeCount=1150,bladeInstances=new T.InstancedMesh(grassBlade,bladeMat,bladeCount),dummy=new T.Object3D();
+bladeInstances.castShadow=false;bladeInstances.receiveShadow=false;scene.add(bladeInstances);
+for(let i=0;i<bladeCount;i++){dummy.position.set((rnd()-.5)*18,.035,(rnd()-.5)*32);dummy.rotation.set(0,rnd()*6.28,(rnd()-.5)*.4);dummy.scale.set(.65+rnd()*.65,.45+rnd()*.8,.65+rnd()*.65);dummy.updateMatrix();bladeInstances.setMatrixAt(i,dummy.matrix)}
+bladeInstances.instanceMatrix.needsUpdate=true;
+const petals= new T.InstancedMesh(flowerGeo,flowerPetal,520);
+petals.castShadow=false;scene.add(petals);
+const flowerDots=new T.InstancedMesh(flowerGeo,flowerCenter,104);flowerDots.castShadow=false;scene.add(flowerDots);
+for(let i=0;i<104;i++){const x=(rnd()-.5)*17,z=(rnd()-.5)*31;
+ for(let k=0;k<5;k++){let a=k*Math.PI*2/5;dummy.position.set(x+Math.cos(a)*.065,.07,z+Math.sin(a)*.065);dummy.rotation.set(0,0,0);dummy.scale.set(.05,.02,.05);dummy.updateMatrix();petals.setMatrixAt(i*5+k,dummy.matrix)}
+ dummy.position.set(x,.085,z);dummy.scale.set(.035,.023,.035);dummy.updateMatrix();flowerDots.setMatrixAt(i,dummy.matrix)}
+petals.instanceMatrix.needsUpdate=true;flowerDots.instanceMatrix.needsUpdate=true;
+let obstacles=[],frogs=[],spiders=[],path=[],level=1,score=0,lives=3,caught=0,goal=8,time=77,invincible=0,heading=-Math.PI/2,targetHeading=heading,head={x:0,z:0},speed=3.8,stepCarry=0,playing=false,pointer=null,gameTime=0;
+const X=8.55,Z=15.85,STEP=.10,SPACING=.31;
+const snakeGroup=new T.Group();scene.add(snakeGroup);
+const snakeSkin=new T.MeshStandardMaterial({color:0xffffff,roughness:.8,metalness:0,vertexColors:true,side:T.DoubleSide,normalMap:snakePBR.normalMap,normalScale:new T.Vector2(.23,.23),roughnessMap:snakePBR.roughnessMap});
+const rings=68,sides=20;const pos=new Float32Array((rings+1)*(sides+1)*3),norm=new Float32Array(pos.length),uv=new Float32Array((rings+1)*(sides+1)*2),col=new Float32Array(pos.length),indices=[];
+for(let i=0;i<rings;i++)for(let j=0;j<sides;j++){let a=i*(sides+1)+j,b=a+sides+1;indices.push(a,b,a+1,b,b+1,a+1)}
+const bodyGeo=new T.BufferGeometry();bodyGeo.setAttribute('position',new T.BufferAttribute(pos,3).setUsage(T.DynamicDrawUsage));bodyGeo.setAttribute('normal',new T.BufferAttribute(norm,3).setUsage(T.DynamicDrawUsage));bodyGeo.setAttribute('uv',new T.BufferAttribute(uv,2));bodyGeo.setAttribute('color',new T.BufferAttribute(col,3));bodyGeo.setIndex(indices);
+const body=mesh(bodyGeo,snakeSkin,0,0,0,snakeGroup);body.frustumCulled=false;const headGroup=new T.Group();snakeGroup.add(headGroup);
+const headSkin=new T.MeshStandardMaterial({color:0x9cdb93,roughness:.7,map:snakePBR.map,normalMap:snakePBR.normalMap,normalScale:new T.Vector2(.2,.2),roughnessMap:snakePBR.roughnessMap});
+const headMesh=mesh(ball,headSkin,0,.34,0,headGroup);headMesh.scale.set(.46,.27,.56);
+const jaw=mesh(ball,belly,0,.21,-.24,headGroup);
+const snout=mesh(ball,headSkin,0,.30,-.40,headGroup);snout.scale.set(.37,.15,.36);
+for(let s of [-1,1]){let brow=mesh(ball,headSkin,s*.27,.61,-.18,headGroup);brow.scale.set(.19,.09,.15);let cheekStripe=mesh(ball,dark,s*.35,.33,-.25,headGroup);cheekStripe.scale.set(.045,.025,.22)}
+jaw.scale.set(.33,.13,.29);
+for(const side of [-1,1]){let socket=mesh(ball,mat(0x4b8c3c,.5),side*.28,.53,-.19,headGroup);socket.scale.set(.17,.17,.16);let eye=mesh(ball,eyeWhite,side*.29,.55,-.26,headGroup);eye.scale.set(.115,.115,.12);let iris=mesh(ball,pupil,side*.29,.55,-.356,headGroup);iris.scale.set(.052,.075,.026);let nostril=mesh(ball,dark,side*.17,.34,-.46,headGroup);nostril.scale.set(.028,.016,.016)}
+function wrappedDiff(a,b,span){let d=a-b;return d-Math.round(d/span)*span}
+function wrap(v,limit){const span=limit*2;return ((v+limit)%span+span)%span-limit}
+function pathPoint(distance){let q=distance/STEP,i=Math.floor(q),f=q-i,a=path[Math.min(i,path.length-1)]||head,b=path[Math.min(i+1,path.length-1)]||a;return{x:a.x+(b.x-a.x)*f,z:a.z+(b.z-a.z)*f}}
+let length=4.6;
+
+/* External GLB integration: retain working collision and movement code. */
+const glbStatus={snake:false,frog:false};
+const assetIndicator=document.createElement('div');assetIndicator.style.cssText='position:fixed;bottom:9px;left:9px;z-index:99;padding:5px 9px;border-radius:9px;background:#132a1bce;color:#e9f5db;font:11px system-ui;pointer-events:none';assetIndicator.textContent='3D modeller yükleniyor…';document.body.appendChild(assetIndicator);
+
+function improveFrogModel(root){
+ const skin=new T.MeshStandardMaterial({color:0x3b9c34,roughness:.42});
+ const highlight=new T.MeshStandardMaterial({color:0x75c84b,roughness:.52});
+ const gold=new T.MeshStandardMaterial({color:0xe4ba3b,roughness:.46});
+ const dark=new T.MeshStandardMaterial({color:0x1b4c28,roughness:.67});
+ const iris=new T.MeshStandardMaterial({color:0xd8a64e,roughness:.23});
+ const pupil=new T.MeshStandardMaterial({color:0x101d0f,roughness:.15});
+ const belly=new T.MeshStandardMaterial({color:0xc4cf86,roughness:.8});
+ // Override imported pale GLB materials, which are washed out on iPhone.
+ root.traverse(obj=>{if(obj.isMesh&&obj.material){
+  obj.material=obj.material.clone();if(obj.material.color)obj.material.color.set(0x429b37);
+  obj.material.map=null;obj.material.vertexColors=false;obj.material.roughness=.58;
+ }});
+ detailSphere(root,highlight,[0,.61,-.16],[.28,.055,.25],16);
+ detailSphere(root,belly,[0,.20,-.35],[.32,.07,.30],14);
+ for(const s of [-1,1]){
+  detailSphere(root,skin,[s*.32,.61,-.43],[.18,.17,.19],14);
+  detailSphere(root,iris,[s*.33,.68,-.56],[.115,.11,.095],14);
+  detailSphere(root,pupil,[s*.33,.69,-.642],[.053,.068,.029],12);
+  detailSphere(root,new T.MeshStandardMaterial({color:0xffffff,roughness:.2}),[s*.31,.73,-.666],[.025,.024,.013],9);
+  for(let j=0;j<4;j++)detailSphere(root,dark,[s*(.09+j*.065),.62-j*.02,.10+j*.12],[.035,.014,.049],8)
+ }
+}
+
+async function integrateAuthoredGLB(){
+ try{
+  const mod=await import('https://esm.sh/three@0.160.0/examples/jsm/loaders/GLTFLoader.js?bundle');
+  const loader=new mod.GLTFLoader();
+  const load=url=>new Promise((resolve,reject)=>loader.load(url,resolve,undefined,reject));
+  const [snakeResult,frogResult]=await Promise.allSettled([
+   load('../assets/models/snake_uv_pbr.glb'),
+   load('../assets/models/frog_detailed.glb')
+  ]);
+  if(frogResult.status==='fulfilled'){
+   const frogAsset=frogResult.value.scene;improveFrogModel(frogAsset);
+   frogAsset.traverse(obj=>{if(obj.isMesh){obj.castShadow=true;obj.receiveShadow=true}});
+   assetCache.frog=frogAsset;
+   // Replace only artwork. Keep each existing frog's position, collision and behavior.
+   for(const f of frogs){
+    const root=f.obj;
+    if(root&&root.isGroup){root.clear();const visual=frogAsset.clone(true);visual.scale.setScalar(.78);root.add(visual)}
+   }
+   glbStatus.frog=true;assetIndicator.textContent='Kurbağa GLB yüklendi';
+  }else console.warn('Frog GLB not found; original visuals retained',frogResult.reason);
+  if(snakeResult.status==='fulfilled'){
+   const source=snakeResult.value.scene;
+   source.traverse(obj=>{if(obj.isMesh){obj.castShadow=true;obj.receiveShadow=true}});
+   // The GLB contains a straight body; the live snake needs its deformable body
+   // for accurate turning. Reuse its authored PBR materials on the deforming mesh.
+   let bodyMaterial=null;
+   source.traverse(obj=>{if(obj.isMesh&&obj.geometry&&obj.geometry.boundingBox===null)obj.geometry.computeBoundingBox();
+    if(obj.isMesh&&obj.geometry.boundingBox&&obj.geometry.boundingBox.min.z < -3)bodyMaterial=obj.material});
+   if(bodyMaterial){
+    // Preserve vertex colors and dynamic tube geometry; apply the authored maps.
+    const m=snakeSkin;
+    if(bodyMaterial.map){m.map=bodyMaterial.map;m.map.wrapS=m.map.wrapT=T.RepeatWrapping;m.map.needsUpdate=true;m.color.set(0xb4e0a1)}
+    if(bodyMaterial.normalMap)m.normalMap=bodyMaterial.normalMap;
+    if(bodyMaterial.roughnessMap)m.roughnessMap=bodyMaterial.roughnessMap;
+    m.needsUpdate=true;
+   }
+   // Keep the anatomically positioned game head. The GLB's straight-body scene
+   // was mistakenly cloned as a head, producing the pale disconnected blob.
+   headGroup.traverse(o=>{if(o.isMesh&&o.material&&o.material.color){
+    o.material=o.material.clone();if(o.material===headSkin||o.material.map)o.material.map=null;
+   }});
+   headSkin.map=null;headSkin.normalMap=null;headSkin.roughnessMap=null;headSkin.color.set(0x4aab3c);headSkin.roughness=.43;headSkin.needsUpdate=true;
+   const headPattern=new T.MeshStandardMaterial({color:0x2b7030,roughness:.75});
+   for(const side of [-1,1])for(let j=0;j<4;j++){
+    const spot=new T.Mesh(new T.SphereGeometry(1,10,8),headPattern);
+    spot.scale.set(.065,.014,.065);spot.position.set(side*(.12+j*.06),.59-j*.025,-.05+j*.09);headGroup.add(spot);
+   }
+   glbStatus.snake=true;
+  }else console.warn('Snake GLB not found; original visuals retained',snakeResult.reason);
+  assetIndicator.textContent='3D modeller: yılan '+(glbStatus.snake?'✓':'×')+' / kurbağa '+(glbStatus.frog?'✓':'×');
+ }catch(err){console.error('GLB integration unavailable; fallback scene remains playable',err);assetIndicator.textContent='GLB yükleme hatası: eski modeller etkin'}
+}
+
+function updateSnake(){let currentRings=Math.max(15,Math.min(rings,Math.ceil(length/SPACING)*3));const count=(rings+1)*(sides+1);for(let i=0;i<=rings;i++){let dist=length*i/rings,p=pathPoint(dist),p0=pathPoint(Math.max(0,dist-.07)),p1=pathPoint(Math.min(length,dist+.07)),tx=p0.x-p1.x,tz=p0.z-p1.z,l=Math.hypot(tx,tz)||1;tx/=l;tz/=l;let nx=-tz,nz=tx;let tail=Math.min(1,(length-dist)/.85);let neck=Math.min(1,.82+dist/.8);let radius=(.33+.035*Math.sin(dist*1.5)) *Math.max(.045,tail)*neck;for(let j=0;j<=sides;j++){let angle=j/sides*Math.PI*2,c=Math.cos(angle),s=Math.sin(angle),k=(i*(sides+1)+j)*3;pos[k]=p.x+nx*c*radius;pos[k+1]=.34+s*radius*.88;pos[k+2]=p.z+nz*c*radius;norm[k]=nx*c;norm[k+1]=s;norm[k+2]=nz*c;let top=s>.08;let pattern=Math.sin(dist*10.5+Math.sin(angle*3)*.8)*Math.cos(angle*3.0);let blotch=top&&pattern>.26;let scales=Math.sin(dist*38+Math.floor(j/2)*1.4)*.055;let base=top?(blotch?[.13+scales,.34+scales,.12]:[.27+scales,.56+scales,.22]):[.69,.79,.47];col[k]=base[0];col[k+1]=base[1];col[k+2]=base[2];let u=(i*(sides+1)+j)*2;uv[u]=j/sides;uv[u+1]=dist/5.8*3}}
+bodyGeo.attributes.position.needsUpdate=true;bodyGeo.attributes.normal.needsUpdate=true;bodyGeo.attributes.color.needsUpdate=true;bodyGeo.computeBoundingSphere();headGroup.position.set(head.x,0,head.z);headGroup.rotation.y=-heading-Math.PI/2;headGroup.visible=invincible<=0||Math.floor(gameTime*8)%2===0;body.visible=headGroup.visible}
+function clear(list){for(const x of list){scene.remove(x.obj);if(x.obj.geometry)x.obj.geometry.dispose()}list.length=0}
+function free(minHead=3){for(let i=0;i<180;i++){let x=(rnd()-.5)*14.8,z=(rnd()-.5)*27;if(Math.hypot(x-head.x,z-head.z)>minHead&&obstacles.every(o=>Math.hypot(x-o.x,z-o.z)>o.r+1.1))return{x,z}}return{x:6,z:11}}
+function frog(gold=false){let p=free(),g=new T.Group();scene.add(g);let color=gold?frogGold:frogGreen;let b=mesh(ball,color,0,.29,.04,g);b.scale.set(.38,.24,.38);let face=mesh(ball,color,0,.32,-.24,g);face.scale.set(.34,.20,.25);
+for(let side of [-1,1]){let cheek=mesh(ball,frogLight,side*.22,.30,-.31,g);cheek.scale.set(.12,.09,.12);let socket=mesh(ball,color,side*.23,.50,-.28,g);socket.scale.set(.15,.16,.14);let eye=mesh(ball,eyeWhite,side*.23,.52,-.345,g);eye.scale.set(.115,.12,.105);let iris=mesh(ball,pupil,side*.23,.53,-.437,g);iris.scale.set(.055,.072,.028);let highlight=mesh(ball,eyeWhite,side*.215,.57,-.462,g);highlight.scale.set(.018,.022,.012);
+let thigh=mesh(ball,color,side*.34,.18,.22,g);thigh.scale.set(.19,.16,.22);let shin=mesh(new T.CapsuleGeometry(.075,.17,4,8),color,side*.43,.10,.34,g);shin.rotation.x=.8;let foot=mesh(ball,color,side*.47,.065,.07,g);foot.scale.set(.17,.055,.16);
+let arm=mesh(new T.CapsuleGeometry(.055,.12,3,7),color,side*.31,.19,-.24,g);arm.rotation.z=side*.6;for(let t=-1;t<=1;t++){let toe=mesh(ball,color,side*(.47+t*.065),.05,-.045,g);toe.scale.set(.045,.025,.09)}
+for(let k=0;k<3;k++){let spot=mesh(ball,gold?frogGold:frogSpot,side*(.10+k*.06),.48,.08+k*.09,g);spot.scale.set(.045,.012,.052)}}
+let mouth=mesh(new T.TorusGeometry(.13,.011,4,16,Math.PI),frogMouth,0,.245,-.451,g);mouth.rotation.z=Math.PI;if(assetCache.frog){g.clear();const model=assetCache.frog.clone(true);model.scale.setScalar(.78);g.add(model)}g.position.set(p.x,0,p.z);frogs.push({...p,gold,obj:g,cool:rnd()*.7,hop:0,vx:0,vz:0})}
+function obstacle(){let p=free(4),rock=rnd()<.7,g=new T.Group();scene.add(g);if(rock){let b=mesh(new T.DodecahedronGeometry(.52+rnd()*.15,1),stone,0,.33,0,g);b.scale.set(1.1,.78,.92);b.rotation.set(rnd()*.4,rnd()*3,rnd()*.3);for(let i=0;i<5;i++){let a=rnd()*6.28,patch=mesh(ball,moss,Math.cos(a)*.34,.53,Math.sin(a)*.3,g);patch.scale.set(.13,.035,.10)}}else{let log=mesh(new T.CylinderGeometry(.28,.32,1.3,12),wood,0,.31,0,g);log.rotation.z=Math.PI/2;for(let s of [-1,1]){let ring=mesh(new T.TorusGeometry(.22,.018,6,18),mat(0xb89166),s*.65,.31,0,g);ring.rotation.y=Math.PI/2}for(let i=0;i<3;i++){let leafPatch=mesh(ball,moss,(rnd()-.5)*.7,.56,(rnd()-.5)*.25,g);leafPatch.scale.set(.18,.045,.12)}}const model=assetCache[rock?'rock':'log'];if(model){g.clear();const real=model.clone(true);real.scale.setScalar(rock?.82:.85);g.add(real)}g.position.set(p.x,0,p.z);obstacles.push({...p,obj:g,r:rock?.65:.78})}
+function spider(){let p=free(4),g=new T.Group();scene.add(g);let abdomen=mesh(ball,spiderBrown,0,.26,.15,g);abdomen.scale.set(.29,.20,.32);let chest=mesh(ball,dark,0,.26,-.20,g);chest.scale.set(.20,.16,.18);let stripe=mesh(ball,mat(0x82664e),0,.43,.16,g);stripe.scale.set(.13,.018,.20);
+const legs=[];for(let side of [-1,1])for(let j=0;j<4;j++){let z=.2-j*.16;let hip=new T.Group();hip.position.set(side*.13,.25,z);g.add(hip);let upper=mesh(new T.CylinderGeometry(.027,.036,.31,6),spiderBrown,side*.14,.045,0,hip);upper.rotation.z=side*.85;let knee=new T.Group();knee.position.set(side*.27,.11,0);hip.add(knee);let lower=mesh(new T.CylinderGeometry(.015,.026,.40,6),spiderBrown,side*.11,-.17,0,knee);lower.rotation.z=-side*.48;legs.push({hip,knee,j,side})}
+for(let s of [-1,1])for(let i=0;i<2;i++){let eye=mesh(ball,spiderEyes,s*(.07+i*.06),.35,-.36,g);eye.scale.set(.025,.025,.025)}if(assetCache.spider){g.clear();const model=assetCache.spider.clone(true);model.scale.setScalar(1.16);g.add(model)}g.position.set(p.x,0,p.z);spiders.push({...p,obj:g,t:rnd()*6,legs})}
+function ui(){document.getElementById('count').textContent=caught+' / '+goal;document.getElementById('time').textContent=Math.ceil(time);document.getElementById('life').textContent='♥'.repeat(lives);document.getElementById('lvl').textContent=level;document.getElementById('score').textContent=score}
+function reset(next=false){clear(obstacles);clear(frogs);clear(spiders);if(!next){level=1;score=0}lives=3;caught=0;goal=7+level;time=Math.max(50,80-level*3);speed=Math.min(6.1,3.7+level*.18);length=4.6;invincible=2.5;head={x:0,z:0};heading=targetHeading=-Math.PI/2;path=[];for(let i=0;i<500;i++)path.push({x:0,z:i*STEP});stepCarry=0;pointer=null;for(let i=0;i<Math.min(8,1+level);i++)obstacle();for(let i=0;i<5;i++)frog(i===4);for(let i=0;i<Math.min(3,Math.floor(level/2));i++)spider();playing=true;document.getElementById('overlay').style.display='none';ui()}
+function finish(won){if(!playing)return;playing=false;pointer=null;document.getElementById('overlay').style.display='flex';document.querySelector('h1').textContent=won?'BÖLÜM TAMAMLANDI!':'OYUN BİTTİ';document.querySelector('#panel p').textContent=caught+' kurbağa · '+score+' puan';document.getElementById('play').textContent=won?'SONRAKİ BÖLÜM':'TEKRAR OYNA';document.getElementById('play').onclick=()=>{if(won)level++;reset(won)}}
+function damage(){if(invincible>0||!playing)return;lives--;if(lives<=0){ui();finish(false);return}invincible=2.8;head={x:0,z:0};heading=targetHeading=-Math.PI/2;path=[];for(let i=0;i<500;i++)path.push({x:0,z:i*STEP});stepCarry=0;pointer=null;ui()}
+const canvas=renderer.domElement;
+canvas.addEventListener('pointerdown',e=>{if(!playing||pointer)return;pointer={id:e.pointerId,x:e.clientX,y:e.clientY};canvas.setPointerCapture(e.pointerId)});
+canvas.addEventListener('pointermove',e=>{if(!pointer||pointer.id!==e.pointerId)return;let dx=e.clientX-pointer.x,dy=e.clientY-pointer.y;if(Math.hypot(dx,dy)>15)targetHeading=Math.atan2(dy,dx)});
+function release(e){if(pointer&&pointer.id===e.pointerId)pointer=null}canvas.addEventListener('pointerup',release);canvas.addEventListener('pointercancel',release);
+function resize(){let w=innerWidth,h=innerHeight;renderer.setSize(w,h);let view=36.8,a=w/h;camera.left=-view*a/2;camera.right=view*a/2;camera.top=view/2;camera.bottom=-view/2;camera.updateProjectionMatrix()}addEventListener('resize',resize);resize();
+let previous=performance.now();
+function frame(now){requestAnimationFrame(frame);let dt=Math.min(.045,(now-previous)/1000);previous=now;gameTime+=dt;if(playing){time-=dt;invincible=Math.max(0,invincible-dt);if(time<=0)finish(false);else{let delta=Math.atan2(Math.sin(targetHeading-heading),Math.cos(targetHeading-heading)),turn=dt*5.4;heading+=Math.max(-turn,Math.min(turn,delta));stepCarry+=speed*dt;while(stepCarry>=STEP){stepCarry-=STEP;let old={...head};head.x=wrap(head.x+Math.cos(heading)*STEP,X);head.z=wrap(head.z+Math.sin(heading)*STEP,Z);path.unshift({...head});path.length=500;let jumpX=head.x-old.x,jumpZ=head.z-old.z;if(Math.abs(jumpX)>X||Math.abs(jumpZ)>Z){for(let i=1;i<path.length;i++){path[i].x+=Math.round((head.x-path[i].x)/(2*X))*(2*X);path[i].z+=Math.round((head.z-path[i].z)/(2*Z))*(2*Z)}}}
+for(const f of [...frogs]){f.cool-=dt;f.hop=Math.max(0,f.hop-dt*2.5);let dx=wrappedDiff(f.x,head.x,2*X),dz=wrappedDiff(f.z,head.z,2*Z),d=Math.hypot(dx,dz);if(d<2.8&&d>.6&&f.cool<=0){let a=Math.atan2(dz,dx),move=f.gold?1.15:.83;f.x=Math.max(-8,Math.min(8,f.x+Math.cos(a)*move));f.z=Math.max(-15,Math.min(15,f.z+Math.sin(a)*move));f.cool=f.gold?.85:1.35;f.hop=1}f.obj.position.set(f.x,Math.sin(f.hop*Math.PI)*.47,f.z);f.obj.rotation.y=Math.atan2(dx,dz);if(Math.hypot(wrappedDiff(f.x,head.x,2*X),wrappedDiff(f.z,head.z,2*Z))<.64){scene.remove(f.obj);frogs.splice(frogs.indexOf(f),1);caught++;score+=f.gold?500:100;length=Math.min(12.5,length+.35);if(caught>=goal){finish(true);break}frog(f.gold)}}
+if(playing&&invincible<=0){if(obstacles.some(o=>Math.hypot(wrappedDiff(head.x,o.x,2*X),wrappedDiff(head.z,o.z,2*Z))<o.r+.27)||spiders.some(s=>Math.hypot(wrappedDiff(head.x,s.x,2*X),wrappedDiff(head.z,s.z,2*Z))<.6))damage();else for(let d=1.55;d<length;d+=.28){let p=pathPoint(d);if(Math.hypot(head.x-p.x,head.z-p.z)<.48){damage();break}}}
+for(const s of spiders){s.t+=dt;s.obj.position.set(s.x+Math.sin(s.t)*.18,0,s.z+Math.cos(s.t)*.18);for(const leg of s.legs){leg.hip.rotation.y=Math.sin(s.t*9+leg.j*1.6+(leg.side>0?Math.PI:0))*.24;leg.knee.rotation.z=leg.side*Math.sin(s.t*9+leg.j*1.6)*.18}}ui()}}updateSnake();renderer.render(scene,camera)}
+requestAnimationFrame(frame);const playButton=document.getElementById('play');playButton.disabled=true;playButton.textContent='3D MODELLER YÜKLENİYOR';
+modelReady.then(()=>{const missing=['tree','frog','spider','rock','log'].filter(k=>!assetCache[k]);playButton.disabled=false;playButton.textContent=missing.length?'EKSİK MODEL · OYNA':'FOREST DETAIL · OYNA';playButton.onclick=()=>reset(false);if(missing.length){const error=document.getElementById('error');error.style.display='block';error.textContent='Bazı modeller yüklenemedi: '+missing.join(', ')}});
+addEventListener('error',e=>{const el=document.getElementById('error');el.style.display='block';el.textContent='Forest Rebuild grafik hatası: '+(e.message||'Bilinmeyen hata')});
+  setTimeout(()=>integrateAuthoredGLB(),100);
+}
+</script></body></html>
