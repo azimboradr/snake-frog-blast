@@ -353,12 +353,12 @@ window.installAnimatedSnake=function(g,THREEModule){
  const model=g.scene;
  const box=new T.Box3().setFromObject(model),size=box.getSize(new T.Vector3()),center=box.getCenter(new T.Vector3());
  const root=new T.Group();const pivot=new T.Group();root.add(pivot);pivot.add(model);
- model.position.sub(center);pivot.scale.setScalar(0.65/(Math.max(size.x,size.y,size.z)||1));pivot.rotation.y=Math.PI;
+ model.position.sub(center);pivot.scale.setScalar(0.40/(Math.max(size.x,size.y,size.z)||1));pivot.rotation.y=0;
  scene.add(root);authoredSnake=root;
  authoredMixer=new THREEModule.AnimationMixer(model);
  const clip=g.animations.find(a=>/walk/i.test(a.name))||g.animations[0];if(clip)authoredMixer.clipAction(clip).play();
  headGroup.visible=false;body.visible=false;
- const indicator=document.createElement('div');indicator.textContent='✓ ORTA BOY YILAN TESTİ • '+g.animations.length+' ANİMASYON';indicator.style.cssText='position:fixed;bottom:8px;left:8px;z-index:999;background:#10391edc;color:#fff;padding:7px;border-radius:8px;font:11px system-ui';document.body.appendChild(indicator);
+ const indicator=document.createElement('div');indicator.textContent='✓ BOYUT VE BAŞ YÖNÜ TESTİ • '+g.animations.length+' ANİMASYON';indicator.style.cssText='position:fixed;bottom:8px;left:8px;z-index:999;background:#10391edc;color:#fff;padding:7px;border-radius:8px;font:11px system-ui';document.body.appendChild(indicator);
 };
 function clear(list){for(const x of list){scene.remove(x.obj);if(x.obj.geometry)x.obj.geometry.dispose()}list.length=0}
 function free(minHead=3){for(let i=0;i<180;i++){let x=(rnd()-.5)*14.8,z=(rnd()-.5)*27;if(Math.hypot(x-head.x,z-head.z)>minHead&&obstacles.every(o=>Math.hypot(x-o.x,z-o.z)>o.r+1.1))return{x,z}}return{x:6,z:11}}
