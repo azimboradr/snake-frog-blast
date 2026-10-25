@@ -346,19 +346,19 @@ function makeApple(gold=false){
 }
 function integrateAuthoredGLB(){assetCache.frog=makeApple(false);for(const f of frogs){if(f.obj){f.obj.clear();f.obj.add(makeApple(f.gold))}}}
 function updateSnake(){let currentRings=Math.max(15,Math.min(rings,Math.ceil(length/SPACING)*3));const count=(rings+1)*(sides+1);for(let i=0;i<=rings;i++){let dist=length*i/rings,p=pathPoint(dist),p0=pathPoint(Math.max(0,dist-.07)),p1=pathPoint(Math.min(length,dist+.07)),tx=p0.x-p1.x,tz=p0.z-p1.z,l=Math.hypot(tx,tz)||1;tx/=l;tz/=l;let nx=-tz,nz=tx;let tail=Math.min(1,(length-dist)/.85);let neck=Math.min(1,.82+dist/.8);let radius=(.39+.016*Math.sin(dist*1.5)) *Math.max(.045,tail)*neck;for(let j=0;j<=sides;j++){let angle=j/sides*Math.PI*2,c=Math.cos(angle),s=Math.sin(angle),k=(i*(sides+1)+j)*3;pos[k]=p.x+nx*c*radius;pos[k+1]=.34+s*radius*.88;pos[k+2]=p.z+nz*c*radius;norm[k]=nx*c;norm[k+1]=s;norm[k+2]=nz*c;let top=s>.08;let pattern=Math.sin(dist*10.5+Math.sin(angle*3)*.8)*Math.cos(angle*3.0);let blotch=top&&pattern>.26;let scales=Math.sin(dist*38+Math.floor(j/2)*1.4)*.055;let base=top?(blotch?[.20+scales,.40+scales,.10]:[.33+scales,.59+scales,.20]):[.66,.74,.35];col[k]=base[0];col[k+1]=base[1];col[k+2]=base[2];let u=(i*(sides+1)+j)*2;uv[u]=j/sides;uv[u+1]=dist/5.8*3}}
-bodyGeo.attributes.position.needsUpdate=true;bodyGeo.attributes.normal.needsUpdate=true;bodyGeo.attributes.color.needsUpdate=true;bodyGeo.computeBoundingSphere();headGroup.position.set(head.x,0,head.z);headGroup.rotation.y=-heading-Math.PI/2;headGroup.visible=!authoredSnake&&(invincible<=0||Math.floor(gameTime*8)%2===0);body.visible=headGroup.visible;if(authoredSnake){authoredSnake.position.set(head.x,.35,head.z);authoredSnake.rotation.y=-heading-Math.PI/2;authoredSnake.visible=invincible<=0||Math.floor(gameTime*8)%2===0}}
+bodyGeo.attributes.position.needsUpdate=true;bodyGeo.attributes.normal.needsUpdate=true;bodyGeo.attributes.color.needsUpdate=true;bodyGeo.computeBoundingSphere();headGroup.position.set(head.x,0,head.z);headGroup.rotation.y=-heading-Math.PI/2;headGroup.visible=!authoredSnake&&(invincible<=0||Math.floor(gameTime*8)%2===0);body.visible=headGroup.visible;if(authoredSnake){authoredSnake.position.set(head.x,.18,head.z);authoredSnake.rotation.y=-heading+Math.PI/2;authoredSnake.visible=invincible<=0||Math.floor(gameTime*8)%2===0}}
 
 let authoredSnake=null,authoredMixer=null;
 window.installAnimatedSnake=function(g,THREEModule){
  const model=g.scene;
  const box=new T.Box3().setFromObject(model),size=box.getSize(new T.Vector3()),center=box.getCenter(new T.Vector3());
  const root=new T.Group();const pivot=new T.Group();root.add(pivot);pivot.add(model);
- model.position.sub(center);pivot.scale.setScalar(2.0/(Math.max(size.x,size.y,size.z)||1));
+ model.position.sub(center);pivot.scale.setScalar(0.48/(Math.max(size.x,size.y,size.z)||1));pivot.rotation.y=Math.PI;
  scene.add(root);authoredSnake=root;
  authoredMixer=new THREEModule.AnimationMixer(model);
  const clip=g.animations.find(a=>/walk/i.test(a.name))||g.animations[0];if(clip)authoredMixer.clipAction(clip).play();
  headGroup.visible=false;body.visible=false;
- const indicator=document.createElement('div');indicator.textContent='✓ GERÇEK ANİMASYONLU YILAN • '+g.animations.length+' ANİMASYON';indicator.style.cssText='position:fixed;bottom:8px;left:8px;z-index:999;background:#10391edc;color:#fff;padding:7px;border-radius:8px;font:11px system-ui';document.body.appendChild(indicator);
+ const indicator=document.createElement('div');indicator.textContent='✓ KÜÇÜLTÜLMÜŞ YILAN TESTİ • '+g.animations.length+' ANİMASYON';indicator.style.cssText='position:fixed;bottom:8px;left:8px;z-index:999;background:#10391edc;color:#fff;padding:7px;border-radius:8px;font:11px system-ui';document.body.appendChild(indicator);
 };
 function clear(list){for(const x of list){scene.remove(x.obj);if(x.obj.geometry)x.obj.geometry.dispose()}list.length=0}
 function free(minHead=3){for(let i=0;i<180;i++){let x=(rnd()-.5)*14.8,z=(rnd()-.5)*27;if(Math.hypot(x-head.x,z-head.z)>minHead&&obstacles.every(o=>Math.hypot(x-o.x,z-o.z)>o.r+1.1))return{x,z}}return{x:6,z:11}}
