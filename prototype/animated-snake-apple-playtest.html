@@ -353,7 +353,7 @@ window.installAnimatedSnake=function(g,THREEModule){
  const model=g.scene;
  const box=new T.Box3().setFromObject(model),size=box.getSize(new T.Vector3()),center=box.getCenter(new T.Vector3());
  const root=new T.Group();const pivot=new T.Group();root.add(pivot);pivot.add(model);
- model.position.sub(center);pivot.scale.setScalar(0.48/(Math.max(size.x,size.y,size.z)||1));pivot.rotation.y=Math.PI;
+ model.position.sub(center);pivot.scale.setScalar(0.9/(Math.max(size.x,size.y,size.z)||1));pivot.rotation.y=Math.PI;
  scene.add(root);authoredSnake=root;
  authoredMixer=new THREEModule.AnimationMixer(model);
  const clip=g.animations.find(a=>/walk/i.test(a.name))||g.animations[0];if(clip)authoredMixer.clipAction(clip).play();
@@ -398,8 +398,8 @@ function reset(next=false){clear(obstacles);clear(frogs);clear(spiders);if(!next
 function finish(won){if(!playing)return;playing=false;pointer=null;document.getElementById('overlay').style.display='flex';document.querySelector('h1').textContent=won?'BÖLÜM TAMAMLANDI!':'OYUN BİTTİ';document.querySelector('#panel p').textContent=caught+' kurbağa · '+score+' puan';document.getElementById('play').textContent=won?'SONRAKİ BÖLÜM':'TEKRAR OYNA';document.getElementById('play').onclick=()=>{if(won)level++;reset(won)}}
 function damage(){if(invincible>0||!playing)return;lives--;if(lives<=0){ui();finish(false);return}invincible=2.8;head={x:0,z:0};heading=targetHeading=-Math.PI/2;path=[];for(let i=0;i<500;i++)path.push({x:0,z:i*STEP});stepCarry=0;pointer=null;ui()}
 const canvas=renderer.domElement;
-canvas.addEventListener('pointerdown',e=>{if(!playing||pointer)return;pointer={id:e.pointerId,x:e.clientX,y:e.clientY};canvas.setPointerCapture(e.pointerId)});
-canvas.addEventListener('pointermove',e=>{if(!pointer||pointer.id!==e.pointerId)return;let dx=e.clientX-pointer.x,dy=e.clientY-pointer.y;if(Math.hypot(dx,dy)>15)targetHeading=Math.atan2(dy,dx)});
+canvas.style.touchAction='none';canvas.addEventListener('pointerdown',e=>{if(!playing||pointer)return;e.preventDefault();pointer={id:e.pointerId,x:e.clientX,y:e.clientY};canvas.setPointerCapture(e.pointerId);const rect=canvas.getBoundingClientRect();const dx=e.clientX-(rect.left+rect.width/2),dy=e.clientY-(rect.top+rect.height/2);if(Math.hypot(dx,dy)>35)targetHeading=Math.atan2(dy,dx)});
+canvas.addEventListener('pointermove',e=>{if(!pointer||pointer.id!==e.pointerId)return;let dx=e.clientX-pointer.x,dy=e.clientY-pointer.y;if(Math.hypot(dx,dy)>12){e.preventDefault();targetHeading=Math.atan2(dy,dx);pointer.x=e.clientX;pointer.y=e.clientY}});
 function release(e){if(pointer&&pointer.id===e.pointerId)pointer=null}canvas.addEventListener('pointerup',release);canvas.addEventListener('pointercancel',release);
 function resize(){let w=innerWidth,h=innerHeight;renderer.setSize(w,h);let view=38.2,a=w/h;camera.left=-view*a/2;camera.right=view*a/2;camera.top=view/2;camera.bottom=-view/2;camera.updateProjectionMatrix()}addEventListener('resize',resize);resize();
 let previous=performance.now();
